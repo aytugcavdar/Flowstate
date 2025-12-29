@@ -8,7 +8,7 @@ interface TileProps {
 }
 
 export const Tile: React.FC<TileProps> = ({ tile, onClick, isWon }) => {
-  const { type, rotation, hasFlow, status, fixed } = tile;
+  const { type, rotation, hasFlow, flowDelay, status, fixed } = tile;
 
   // --- Cyberpunk Visual Logic ---
   const isBugged = status === NodeStatus.FORBIDDEN && hasFlow;
@@ -103,7 +103,11 @@ export const Tile: React.FC<TileProps> = ({ tile, onClick, isWon }) => {
         className={`w-full h-full transition-transform duration-300 ease-out`}
         style={{ transform: `rotate(${rotation * 90}deg)` }}
       >
-        <div className={`w-full h-full ${fgColor} ${animationClass}`}>
+        {/* The Pipe Container. Note the transition-delay for color changes to create the 'fill' effect */}
+        <div 
+            className={`w-full h-full transition-colors duration-200 ease-linear ${fgColor} ${animationClass}`}
+            style={{ transitionDelay: hasFlow ? `${flowDelay}ms` : '0ms' }}
+        >
             <svg viewBox="0 0 60 60" className="w-full h-full p-2">
                 {renderPipe()}
             </svg>

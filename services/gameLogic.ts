@@ -24,7 +24,8 @@ const areConnected = (t1: TileState, t2: TileState, dirToT2: number) => {
 // --- Flow Logic ---
 
 export const calculateFlow = (grid: Grid): Grid => {
-  const newGrid = grid.map(row => row.map(tile => ({ ...tile, hasFlow: false })));
+  // Reset flow and delay
+  const newGrid = grid.map(row => row.map(tile => ({ ...tile, hasFlow: false, flowDelay: 0 })));
   
   let sourcePos: GridPos | null = null;
   for (let r = 0; r < GRID_SIZE; r++) {
@@ -32,18 +33,20 @@ export const calculateFlow = (grid: Grid): Grid => {
       if (newGrid[r][c].type === TileType.SOURCE) {
         sourcePos = { r, c };
         newGrid[r][c].hasFlow = true;
+        newGrid[r][c].flowDelay = 0;
       }
     }
   }
 
   if (!sourcePos) return newGrid;
 
-  const queue: GridPos[] = [sourcePos];
+  // Queue stores pos and current distance/depth
+  const queue: { pos: GridPos, depth: number }[] = [{ pos: sourcePos, depth: 0 }];
   const visited = new Set<string>();
   visited.add(`${sourcePos.r},${sourcePos.c}`);
 
   while (queue.length > 0) {
-    const curr = queue.shift()!;
+    const { pos: curr, depth } = queue.shift()!;
     const currTile = newGrid[curr.r][curr.c];
 
     for (let d = 0; d < 4; d++) {
@@ -56,13 +59,23 @@ export const calculateFlow = (grid: Grid): Grid => {
 
         if (!visited.has(key) && areConnected(currTile, neighbor, d)) {
           if (neighbor.type !== TileType.BLOCK && neighbor.type !== TileType.EMPTY) {
-            // Diode Direction Check
-            if (currTile.type === TileType.DIODE && currTile.rotation !== d) continue; 
-            if (neighbor.type === TileType.DIODE && neighbor.rotation !== d) continue;
+            
+            // 1. If Current is Diode: It only allows flow in its specific rotation direction.
+            if (currTile.type === TileType.DIODE) {
+                if (currTile.rotation !== d) continue;
+            }
+
+            // 2. If Neighbor is Diode: It only accepts flow from its "back".
+            if (neighbor.type === TileType.DIODE) {
+                if (neighbor.rotation !== d) continue;
+            }
             
             newGrid[nr][nc].hasFlow = true;
+            // Delay increases by distance. 75ms per tile creates a nice "filling" wave.
+            newGrid[nr][nc].flowDelay = (depth + 1) * 75; 
+            
             visited.add(key);
-            queue.push({ r: nr, c: nc });
+            queue.push({ pos: { r: nr, c: nc }, depth: depth + 1 });
           }
         }
       }
@@ -110,29 +123,25 @@ export const generateDailyLevel = (dateStr: string): Grid => {
   const rng = new SeededRNG(dateStr);
   let finalGrid: Grid | null = null;
   
-  // Try generating a valid level up to 20 times.
-  // This ensures we don't settle for a "bad" short path.
   let attempts = 0;
   
   while (!finalGrid && attempts < 20) {
       attempts++;
       
-      // 1. Setup Grid
       const grid: Grid = Array(GRID_SIZE).fill(null).map(() => 
         Array(GRID_SIZE).fill(null).map(() => ({
           type: TileType.EMPTY,
           rotation: 0,
           fixed: false,
           status: NodeStatus.NORMAL,
-          hasFlow: false
+          hasFlow: false,
+          flowDelay: 0
         }))
       );
 
-      // 2. Place Source & Sink with DISTANCE CONSTRAINT
       const sourceR = rng.range(0, GRID_SIZE - 1);
       let sinkR = rng.range(0, GRID_SIZE - 1);
       
-      // Enforce at least 2 rows difference to force a longer path
       let distLoop = 0;
       while (Math.abs(sourceR - sinkR) < 2 && distLoop < 50) {
           sinkR = rng.range(0, GRID_SIZE - 1);
@@ -142,22 +151,15 @@ export const generateDailyLevel = (dateStr: string): Grid => {
       const sourcePos = { r: sourceR, c: 0 };
       const sinkPos = { r: sinkR, c: GRID_SIZE - 1 };
 
-      grid[sourcePos.r][sourcePos.c] = { ...grid[sourcePos.r][sourcePos.c], type: TileType.SOURCE, fixed: true, rotation: 1 };
-      grid[sinkPos.r][sinkPos.c] = { ...grid[sinkPos.r][sinkPos.c], type: TileType.SINK, fixed: true, rotation: 3 };
+      grid[sourcePos.r][sourcePos.c] = { ...grid[sourcePos.r][sourcePos.c], type: TileType.SOURCE, fixed: true, rotation: 0 };
+      grid[sinkPos.r][sinkPos.c] = { ...grid[sinkPos.r][sinkPos.c], type: TileType.SINK, fixed: true, rotation: 0 };
 
-      // 3. Find Main Path (DFS)
-      const path = generatePath(rng, sourcePos, sinkPos);
+      const path = generatePath(rng, sourcePos, sinkPos, grid);
       
-      // REJECT if path is too short (less than 10 nodes for a 6x6 grid)
-      // This forces complexity.
-      if (!path || path.length < 10) {
-          continue; // Retry generation
+      if (!path || path.length < 8) {
+          continue; 
       }
-
-      // If we got here, we have a good path.
-      finalGrid = grid;
       
-      // 4. Draw Path Tiles
       const pathSet = new Set(path.map(p => `${p.r},${p.c}`));
       
       for (let i = 1; i < path.length - 1; i++) {
@@ -169,51 +171,70 @@ export const generateDailyLevel = (dateStr: string): Grid => {
         
         if (dirIn === dirOut) {
             const type = (rng.next() > 0.85) ? TileType.DIODE : TileType.STRAIGHT;
-            finalGrid[curr.r][curr.c] = { type, rotation: (dirIn % 2 === 0 ? 0 : 1), fixed: false, status: NodeStatus.NORMAL, hasFlow: false };
-            if (type === TileType.DIODE) finalGrid[curr.r][curr.c].rotation = dirOut;
+            const baseRotation = (dirIn % 2 === 0 ? 0 : 1);
+            
+            grid[curr.r][curr.c] = { 
+                type, 
+                rotation: baseRotation, 
+                fixed: false, 
+                status: NodeStatus.NORMAL, 
+                hasFlow: false,
+                flowDelay: 0
+            };
+
+            if (type === TileType.DIODE) {
+                grid[curr.r][curr.c].rotation = dirOut;
+            }
+
         } else {
             const rot = getElbowRotation((dirIn + 2) % 4, dirOut);
-            finalGrid[curr.r][curr.c] = { type: TileType.ELBOW, rotation: rot, fixed: false, status: NodeStatus.NORMAL, hasFlow: false };
+            grid[curr.r][curr.c] = { type: TileType.ELBOW, rotation: rot, fixed: false, status: NodeStatus.NORMAL, hasFlow: false, flowDelay: 0 };
         }
       }
 
-      // 5. Add Branches (Decoys with Bugs)
-      addDecoys(rng, finalGrid, path, pathSet);
+      addDecoys(rng, grid, path, pathSet);
+      addRequirements(rng, grid, path);
+      fillEmptyTiles(rng, grid);
 
-      // 6. Add Requirements
-      addRequirements(rng, finalGrid, path);
+      const testFlow = calculateFlow(grid);
+      const isSolvable = checkWinCondition(testFlow);
 
-      // 7. Fill Empty
-      fillEmptyTiles(rng, finalGrid);
+      if (!isSolvable) {
+          continue; 
+      }
 
-      // 8. Scramble Rotations
+      finalGrid = grid;
       scrambleGrid(rng, finalGrid);
   }
 
-  // Fallback if 20 attempts fail (rare): Just return the last attempt or a basic one
-  // (The loop logic above guarantees `finalGrid` is set unless extremely unlucky, 
-  // but TS needs certainty. In practice, calculateFlow handles nulls gracefully or we assume success)
+  if (!finalGrid) {
+      finalGrid = createFallbackGrid();
+  }
   
-  return calculateFlow(finalGrid!);
+  return calculateFlow(finalGrid);
 };
 
 // --- Sub-algorithms ---
 
-function generatePath(rng: SeededRNG, start: GridPos, end: GridPos): GridPos[] | null {
+function generatePath(rng: SeededRNG, start: GridPos, end: GridPos, grid: Grid): GridPos[] | null {
     let bestPath: GridPos[] | null = null;
-    
-    // Helper recursive DFS
-    const explore = (curr: GridPos, path: GridPos[], visited: Set<string>) => {
-        // Optimization: If we found a long path, stop searching for "better" ones to save CPU
-        if (bestPath && bestPath.length > 12) return; 
+    let iterations = 0;
+    const MAX_ITERATIONS = 2500;
 
-        // Target Reached?
-        // Specifically, we need to reach column GRID_SIZE-2 and row == end.r
-        // Because the Sink is at GRID_SIZE-1.
+    const explore = (curr: GridPos, path: GridPos[], visited: Set<string>) => {
+        iterations++;
+        if (iterations > MAX_ITERATIONS) return;
+        if (bestPath && bestPath.length > 15) return; 
+
+        if (curr.r === end.r && curr.c === end.c) {
+            if (!bestPath || path.length > bestPath.length) {
+                bestPath = [...path];
+            }
+            return;
+        }
+
         if (curr.c === GRID_SIZE - 2 && curr.r === end.r) {
-            // Found a valid path to the sink
             const fullPath = [...path, {r: end.r, c: GRID_SIZE - 1}];
-            // Keep the longest path found so far
             if (!bestPath || fullPath.length > bestPath.length) {
                 bestPath = fullPath;
             }
@@ -221,7 +242,6 @@ function generatePath(rng: SeededRNG, start: GridPos, end: GridPos): GridPos[] |
         }
 
         const dirs = [0, 1, 2, 3];
-        // Shuffle directions
         for (let i = dirs.length - 1; i > 0; i--) {
             const j = Math.floor(rng.next() * (i + 1));
             [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
@@ -232,11 +252,10 @@ function generatePath(rng: SeededRNG, start: GridPos, end: GridPos): GridPos[] |
             const nc = curr.c + DIRECTIONS[d][1];
             const key = `${nr},${nc}`;
 
-            // Valid bounds: Columns 0 to GRID_SIZE-2. Row 0 to GRID_SIZE-1.
-            // (We can use col 0 if we loop back, but keeping it simple: cols 0..size-2)
             if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE - 1 && !visited.has(key)) {
-                // Heuristic: Avoid boxing ourselves in.
-                // Count free neighbors
+                
+                if (grid[nr][nc].type === TileType.SOURCE) continue;
+
                 let freeNeighbors = 0;
                 for(let checkD=0; checkD<4; checkD++) {
                     const cnr = nr + DIRECTIONS[checkD][0];
@@ -246,7 +265,6 @@ function generatePath(rng: SeededRNG, start: GridPos, end: GridPos): GridPos[] |
                     }
                 }
 
-                // If strictly dead end (0 free neighbors) and not at target, skip
                 if (freeNeighbors === 0 && !(nc === GRID_SIZE - 2 && nr === end.r)) continue;
 
                 visited.add(key);
@@ -256,9 +274,6 @@ function generatePath(rng: SeededRNG, start: GridPos, end: GridPos): GridPos[] |
                 
                 path.pop();
                 visited.delete(key);
-                
-                // If we found a very good path, break out of loop early
-                if (bestPath && bestPath.length > 15) return;
             }
         }
     };
@@ -267,33 +282,48 @@ function generatePath(rng: SeededRNG, start: GridPos, end: GridPos): GridPos[] |
     return bestPath;
 }
 
+function createFallbackGrid(): Grid {
+    const grid: Grid = Array(GRID_SIZE).fill(null).map(() => 
+        Array(GRID_SIZE).fill(null).map(() => ({
+            type: TileType.EMPTY, rotation: 0, fixed: false, status: NodeStatus.NORMAL, hasFlow: false, flowDelay: 0
+        }))
+    );
+    for(let c=0; c<GRID_SIZE; c++) {
+        const type = (c===0)? TileType.SOURCE : (c===GRID_SIZE-1)? TileType.SINK : TileType.STRAIGHT;
+        const fixed = (c===0 || c===GRID_SIZE-1);
+        const rot = (c===0 || c===GRID_SIZE-1) ? 0 : 1;
+        
+        grid[2][c] = { type, rotation: rot, fixed, status: NodeStatus.NORMAL, hasFlow: false, flowDelay: 0 };
+    }
+    return grid;
+}
+
 function addDecoys(rng: SeededRNG, grid: Grid, path: GridPos[], pathSet: Set<string>) {
     let bugsPlaced = 0;
     const maxBugs = 2;
     let attempts = 0;
 
-    // We want bugs to be "tempting". Place them near the path.
     while (bugsPlaced < maxBugs && attempts < 50) {
         attempts++;
-        // Pick random spot on path
         const idx = rng.range(1, path.length - 2);
         const p = path[idx];
 
-        // Pick random direction
+        if (p.c < 1 || p.c > GRID_SIZE - 2) continue;
+
         const d = rng.range(0, 3);
         const nr = p.r + DIRECTIONS[d][0];
         const nc = p.c + DIRECTIONS[d][1];
 
         if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE && !pathSet.has(`${nr},${nc}`) && grid[nr][nc].type === TileType.EMPTY) {
-            // Place a bug here.
-            // To make it a "decoy", it should look like it *could* connect.
+            if (nc === 0 || nc === GRID_SIZE - 1) continue;
             const type = rng.next() > 0.5 ? TileType.STRAIGHT : TileType.ELBOW;
             grid[nr][nc] = {
                 type,
                 rotation: rng.range(0, 3), 
                 fixed: false,
                 status: NodeStatus.FORBIDDEN,
-                hasFlow: false
+                hasFlow: false,
+                flowDelay: 0
             };
             pathSet.add(`${nr},${nc}`);
             bugsPlaced++;
@@ -302,9 +332,7 @@ function addDecoys(rng: SeededRNG, grid: Grid, path: GridPos[], pathSet: Set<str
 }
 
 function addRequirements(rng: SeededRNG, grid: Grid, path: GridPos[]) {
-    // Pick 3 random points on path (excluding start/end/neighbors)
     const candidates = path.slice(2, path.length - 2);
-    // Fisher-Yates shuffle candidates
     for (let i = candidates.length - 1; i > 0; i--) {
         const j = Math.floor(rng.next() * (i + 1));
         [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
@@ -325,7 +353,7 @@ function fillEmptyTiles(rng: SeededRNG, grid: Grid) {
         for (let c = 0; c < GRID_SIZE; c++) {
             if (grid[r][c].type === TileType.EMPTY) {
                 const roll = rng.next();
-                let type = TileType.ELBOW; // Elbows are best for noise
+                let type = TileType.ELBOW;
                 if (roll > 0.4) type = TileType.STRAIGHT;
                 if (roll > 0.7) type = TileType.TEE;
                 if (roll > 0.9) type = TileType.CROSS;
@@ -335,7 +363,8 @@ function fillEmptyTiles(rng: SeededRNG, grid: Grid) {
                     rotation: rng.range(0, 3),
                     fixed: false,
                     status: NodeStatus.NORMAL,
-                    hasFlow: false
+                    hasFlow: false,
+                    flowDelay: 0
                 };
             }
         }

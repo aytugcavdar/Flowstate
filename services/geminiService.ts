@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { DailyTheme, GameState, Grid, NodeStatus, WinAnalysis } from "../types";
+import { Language } from "../constants/translations";
 
 const THEME_FALLBACK: DailyTheme = {
   name: "Classic Voltage",
@@ -7,12 +8,14 @@ const THEME_FALLBACK: DailyTheme = {
   colorHex: "#3b82f6" // blue-500
 };
 
-export const getDailyTheme = async (dateStr: string): Promise<DailyTheme> => {
+export const getDailyTheme = async (dateStr: string, lang: Language): Promise<DailyTheme> => {
   if (!process.env.API_KEY) return THEME_FALLBACK;
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const prompt = `Create a fun, short 3-word tech/cyberpunk theme name, a one-sentence description, and a hex color code for a daily puzzle game. The vibe should be based on this date seed: ${dateStr}. Return JSON only.`;
+    const langInstruction = lang === 'tr' ? "Output ONLY in Turkish." : "Output in English.";
+    
+    const prompt = `Create a fun, short 3-word tech/cyberpunk theme name, a one-sentence description, and a hex color code for a daily puzzle game. The vibe should be based on this date seed: ${dateStr}. ${langInstruction} Return JSON only.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -41,7 +44,7 @@ export const getDailyTheme = async (dateStr: string): Promise<DailyTheme> => {
   }
 };
 
-export const getWinningCommentary = async (moves: number, grid: Grid): Promise<WinAnalysis> => {
+export const getWinningCommentary = async (moves: number, grid: Grid, lang: Language): Promise<WinAnalysis> => {
     if (!process.env.API_KEY) return { rank: "Offline Operator", comment: `System Optimized. Efficiency: ${moves} moves.` };
 
     try {
@@ -57,8 +60,10 @@ export const getWinningCommentary = async (moves: number, grid: Grid): Promise<W
             totalTiles++;
         });
 
-        // Heuristic for performance context (6x6 grid = 36 tiles)
-        // Assuming ~15-20 moves is efficient for a complex path.
+        const langInstruction = lang === 'tr' 
+            ? "Respond entirely in Turkish. Use cyberpunk/hacker terminology suitable for a Turkish audience." 
+            : "Respond in English.";
+
         const prompt = `
             The player just solved today's logic puzzle "FlowState".
             
@@ -68,9 +73,10 @@ export const getWinningCommentary = async (moves: number, grid: Grid): Promise<W
             - Bonus Nodes Powered: ${bonusHit}/3.
             
             Task:
-            1. Assign a cool, cyberpunk/sysadmin/hacker "Rank" title based on their efficiency (e.g., "Mainframe Deity", "Script Kiddie", "Cable Tangler", "Netrunner Prime").
+            1. Assign a cool, cyberpunk/sysadmin/hacker "Rank" title based on their efficiency (e.g., "Mainframe Deity", "Script Kiddie", "Netrunner Prime").
             2. Write a witty, 1-sentence sarcastic or celebratory remark about their performance as if you are a sassy AI system administrator.
             
+            ${langInstruction}
             Return JSON.
         `;
 
@@ -96,5 +102,54 @@ export const getWinningCommentary = async (moves: number, grid: Grid): Promise<W
         return { rank: "System Glitch", comment: "Analysis Complete." };
     } catch (e) {
         return { rank: "Local User", comment: "Sequence Validated." };
+    }
+}
+
+export const getGameHint = async (grid: Grid, lang: Language): Promise<string> => {
+    if (!process.env.API_KEY) return "Communications offline. Check manual alignment.";
+
+    try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        
+        const simpleGrid = grid.map((row, r) => row.map((t, c) => ({
+            pos: `${r},${c}`,
+            type: t.type,
+            rot: t.rotation,
+            powered: t.hasFlow,
+            isBug: t.status === NodeStatus.FORBIDDEN,
+            isReq: t.status === NodeStatus.REQUIRED
+        })));
+
+        const langInstruction = lang === 'tr' 
+            ? "Output ONLY in Turkish." 
+            : "Output in English.";
+
+        const prompt = `
+            You are "Operator", a helpful but cryptic hacker AI assisting a player in a pipe-flow puzzle.
+            OBJECTIVE: Connect Source (left) to Sink (right).
+            
+            Current Grid State (JSON):
+            ${JSON.stringify(simpleGrid)}
+            
+            Task:
+            Analyze where the flow STOPS.
+            Identify ONE specific tile that needs rotation.
+            
+            Output:
+            A single, short, immersive sentence.
+            DO NOT give coordinates (e.g. "Rotate 3,4").
+            DO say things like "The signal is dying near the center junction" or "Bypass the firewall in the upper quadrant".
+            Keep it under 15 words.
+            ${langInstruction}
+        `;
+
+        const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: prompt,
+        });
+
+        return response.text || "Signal unclear. Try adjusting the perimeter.";
+    } catch (e) {
+        return "Uplink failed. Trust your instincts.";
     }
 }

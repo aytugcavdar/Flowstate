@@ -27,6 +27,7 @@ export interface TileState {
   fixed: boolean; // Cannot rotate (Source/Sink/Blocks)
   status: NodeStatus;
   hasFlow: boolean; // Is currently powered
+  flowDelay: number; // Animation delay in ms based on distance from source
 }
 
 export type Grid = TileState[][];
