@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { generateDailyLevel, calculateFlow, checkWinCondition } from './services/gameLogic';
 import { getDailyTheme, getWinningCommentary, getGameHint } from './services/geminiService';
@@ -28,13 +29,15 @@ const App: React.FC = () => {
   const [isWon, setIsWon] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // New State for Win Animation
+  const [charges, setCharges] = useState(0); // For Capacitor Ability
+
+  // Animation States
   const [showHackEffect, setShowHackEffect] = useState(false);
   
-  // Practice mode specific seed
+  // Practice
   const [practiceSeed, setPracticeSeed] = useState(Date.now().toString());
   
-  // Theme & AI
+  // AI/Theme
   const [theme, setTheme] = useState<DailyTheme | null>(null);
   const [winData, setWinData] = useState<WinAnalysis | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -44,16 +47,11 @@ const App: React.FC = () => {
   const [showIntro, setShowIntro] = useState(false);
   const [showWin, setShowWin] = useState(false);
   
-  // Stats
   const [stats, setStats] = useState<DailyStats>({ streak: 0, lastPlayed: '', history: {} });
-
-  // Translations shortcut
   const t = TRANSLATIONS[lang];
 
-  // Calculate Key based on Mode
   const currentKey = useMemo(() => {
     if (mode === 'DAILY') {
-      // YYYY-MM-DD format based on local time
       const now = new Date();
       return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     } else {
@@ -61,35 +59,26 @@ const App: React.FC = () => {
     }
   }, [mode, practiceSeed]);
 
-  // Storage Key depends on mode to avoid overwriting Daily with Practice
   const storageKey = useMemo(() => {
-     return mode === 'DAILY' ? `${STORAGE_KEY_STATE}_DAILY` : `${STORAGE_KEY_STATE}_PRACTICE`;
+     return mode === 'DAILY' ? `${STORAGE_KEY_STATE}_DAILY_V4` : `${STORAGE_KEY_STATE}_PRACTICE_V4`;
   }, [mode]);
 
-  // --- Dynamic Music Logic ---
+  // --- Dynamic Music ---
   useEffect(() => {
     if (loading || grid.length === 0 || isWon) return;
-
-    // Calculate how much of the grid is powered (Intensity)
-    // We only count non-empty tiles.
     let poweredTiles = 0;
     let totalTiles = 0;
-
     grid.forEach(row => row.forEach(tile => {
         if (tile.type !== TileType.EMPTY) {
             totalTiles++;
             if (tile.hasFlow) poweredTiles++;
         }
     }));
-
     const intensity = totalTiles > 0 ? (poweredTiles / totalTiles) : 0;
-    
-    // Smooth the transition in the audio service
     setMusicIntensity(intensity);
-
   }, [grid, isWon, loading]);
 
-  // --- Initialization ---
+  // --- Init ---
   useEffect(() => {
     const initGame = async () => {
       setLoading(true);
@@ -97,38 +86,32 @@ const App: React.FC = () => {
       setWinData(null);
       setHint(null);
       setShowHackEffect(false);
+      setCharges(0);
       
-      // Stop music when resetting/changing modes, it will restart on interaction
       stopAmbience();
       
-      // 1. Load Global Stats
       const savedStats = localStorage.getItem(STORAGE_KEY_STATS);
       if (savedStats) setStats(JSON.parse(savedStats));
 
-      // 2. Load Theme (Daily gets specific theme, Practice gets random vibe based on seed)
-      // Only fetch theme if it's not already set for this key to save API calls
-      // Pass 'lang' to get translated themes
       getDailyTheme(mode === 'DAILY' ? currentKey : 'CYBERPUNK_RANDOM', lang).then(setTheme);
 
-      // 3. Load or Create Game State
       const savedStateStr = localStorage.getItem(storageKey);
       let loadedState: GameState | null = savedStateStr ? JSON.parse(savedStateStr) : null;
 
-      // If loaded state matches current key (e.g. same day or same practice session)
       if (loadedState && loadedState.gameDate === currentKey) {
         setGrid(loadedState.grid);
         setMoves(loadedState.moves);
         setIsWon(loadedState.isWon);
+        setCharges(loadedState.charges || 0);
         if (loadedState.isWon) setShowWin(true);
-        // Don't show intro if already started
         setShowIntro(false); 
       } else {
-        // New game generation
         const newGrid = generateDailyLevel(currentKey);
         setGrid(newGrid);
         setMoves(0);
         setIsWon(false);
-        setShowIntro(true); // Show intro for new games
+        setCharges(0);
+        setShowIntro(true);
       }
       setLoading(false);
     };
@@ -139,22 +122,63 @@ const App: React.FC = () => {
   // --- Persistence ---
   useEffect(() => {
     if (!loading && grid.length > 0) {
-      const state: GameState = { grid, moves, isWon, gameDate: currentKey };
+      const state: GameState = { grid, moves, isWon, gameDate: currentKey, charges };
       localStorage.setItem(storageKey, JSON.stringify(state));
     }
-  }, [grid, moves, isWon, loading, currentKey, storageKey]);
+  }, [grid, moves, isWon, charges, loading, currentKey, storageKey]);
 
-  // --- Controls ---
+  // --- Special Mechanics ---
+  useEffect(() => {
+      if (loading || isWon) return;
+      
+      // 1. Key Logic
+      let keyPowered = false;
+      let capPowered = false;
+      
+      grid.flat().forEach(t => {
+          if (t.status === NodeStatus.KEY && t.hasFlow) keyPowered = true;
+          if (t.status === NodeStatus.CAPACITOR && t.hasFlow) capPowered = true;
+      });
+
+      // Unlock Locks
+      const hasLockedNodes = grid.flat().some(t => t.status === NodeStatus.LOCKED && t.fixed);
+      if (keyPowered && hasLockedNodes) {
+          playSound('power'); 
+          setGrid(prev => prev.map(row => row.map(t => {
+              if (t.status === NodeStatus.LOCKED) return { ...t, fixed: false };
+              return t;
+          })));
+      }
+
+      // Charge Capacitor
+      // We only charge once when it hits.
+      // Since useEffect runs often, we check if we already have charges.
+      // Logic: If powered and charges == 0, set charges = 1.
+      if (capPowered && charges === 0) {
+          playSound('power');
+          setCharges(1);
+      }
+
+  }, [grid, isWon, loading, charges]);
+
   const handleStartGame = () => {
       setShowIntro(false);
-      // Browser policy: Audio Context must be resumed on user interaction
       startAmbience();
       playSound('power');
   };
 
+  const handleResetPuzzle = () => {
+      if (isWon) return;
+      playSound('glitch'); 
+      const resetGrid = generateDailyLevel(currentKey);
+      setGrid(resetGrid);
+      setMoves(0);
+      setCharges(0);
+      setHint(null);
+  };
+
   const handleNewPractice = () => {
       setPracticeSeed(Date.now().toString());
-      // State reset happens in useEffect when key changes
   };
 
   const handleModeSwitch = (newMode: GameMode) => {
@@ -168,7 +192,6 @@ const App: React.FC = () => {
       const hintText = await getGameHint(grid, lang);
       setHint(hintText);
       setLoadingHint(false);
-      // Clear hint after 8 seconds
       setTimeout(() => setHint(null), 8000);
   };
 
@@ -177,27 +200,43 @@ const App: React.FC = () => {
       playSound('click');
   };
 
-  // --- Interactions ---
   const handleTileClick = useCallback((r: number, c: number) => {
-    if (isWon || grid[r][c].fixed) return;
+    if (isWon) return;
+    const tile = grid[r][c];
     
-    // Ensure music is running if user skipped intro or refreshed
-    // The previous implementation only called it on handleStartGame, which might be skipped if state is loaded
-    startAmbience();
+    // OVERLOAD ABILITY: If clicking a BUG and we have Charge
+    if (tile.status === NodeStatus.FORBIDDEN && charges > 0) {
+        playSound('power'); // Zap sound
+        const newGrid = grid.map(row => row.map(t => ({...t})));
+        // Transform Bug into Normal Pipe
+        newGrid[r][c] = {
+            ...newGrid[r][c],
+            status: NodeStatus.NORMAL,
+            fixed: false
+        };
+        // Use Charge
+        setCharges(0);
+        // Recalculate
+        const flowedGrid = calculateFlow(newGrid);
+        setGrid(flowedGrid);
+        return;
+    }
 
+    if (tile.fixed) {
+        if (tile.status === NodeStatus.LOCKED) playSound('click');
+        return;
+    }
+    
+    startAmbience();
     playSound('rotate');
-    // Clear hint on move interaction
     if (hint) setHint(null);
 
-    // Deep copy grid to modify and calculate flow BEFORE setting state
-    // This allows us to calculate animation delays accurately for the win condition
     const newGrid = grid.map(row => row.map(t => ({ ...t })));
     newGrid[r][c].rotation = (newGrid[r][c].rotation + 1) % 4;
     
-    // Recalculate Flow
     const flowedGrid = calculateFlow(newGrid);
     
-    // Check for glitch activation (Newly powered Forbidden node)
+    // Check Glitch
     const hasNewGlitch = flowedGrid.flat().some((t, i) => 
        t.status === NodeStatus.FORBIDDEN && t.hasFlow && !grid.flat()[i].hasFlow
     );
@@ -207,90 +246,50 @@ const App: React.FC = () => {
         if (navigator.vibrate) navigator.vibrate(50);
     }
 
-    // Check for new power connection
     const prevPower = grid.flat().filter(t => t.hasFlow).length;
     const newPower = flowedGrid.flat().filter(t => t.hasFlow).length;
     if (newPower > prevPower && !hasNewGlitch) {
         playSound('power');
     }
 
-    // Update State
     setGrid(flowedGrid);
     setMoves(m => m + 1);
 
-    // Check Win Condition
     const won = checkWinCondition(flowedGrid);
     if (won) {
       setIsWon(true);
-      
-      // Dynamic delay: Wait for the flow animation to reach the sink
-      let animationDelay = 0;
-      const sinkTile = flowedGrid.flat().find(t => t.type === TileType.SINK);
-      
-      if (sinkTile && sinkTile.hasFlow) {
-        // flowDelay is the start time. 
-        // We add ~300ms for the CSS transition to complete visually
-        // We add ~800ms buffer for the user to enjoy the connected state
-        animationDelay = sinkTile.flowDelay + 300 + 800;
-      } else {
-        animationDelay = 1000;
-      }
-
       setTimeout(() => {
         handleWin(moves + 1, flowedGrid);
-      }, animationDelay);
+      }, 1000);
     }
-  }, [grid, isWon, moves, hint]);
+  }, [grid, isWon, moves, hint, charges]);
 
   const handleWin = async (finalMoves: number, finalGrid: GameState['grid']) => {
-    // 1. Trigger the Hack Animation
     setShowHackEffect(true);
-    // Play win sound (handles stopping ambience)
     playSound('win');
     
-    // Update stats ONLY for Daily mode
     if (mode === 'DAILY') {
         const newStats = { ...stats };
         if (newStats.lastPlayed !== currentKey) {
             newStats.streak += 1;
             newStats.lastPlayed = currentKey;
-            // Simple history tracking
             newStats.history[currentKey] = finalMoves;
             setStats(newStats);
             localStorage.setItem(STORAGE_KEY_STATS, JSON.stringify(newStats));
         }
     }
-
-    // Get AI commentary in background while animation plays
     const data = await getWinningCommentary(finalMoves, finalGrid, lang);
     setWinData(data);
   };
 
-  // Called when CyberpunkOverlay finishes its sequence
   const onHackAnimComplete = () => {
     setShowHackEffect(false);
-    
-    // 2. Show the actual results modal
     setShowWin(true);
   };
 
   const generateShareText = () => {
-    let gridEmoji = '';
-    for(let r=0; r<GRID_SIZE; r++) {
-        for(let c=0; c<GRID_SIZE; c++) {
-            const t = grid[r][c];
-            if (t.type === TileType.SOURCE || t.type === TileType.SINK) gridEmoji += '⚡';
-            else if (t.status === NodeStatus.FORBIDDEN) gridEmoji += t.hasFlow ? '🟥' : '⬛';
-            else if (t.status === NodeStatus.REQUIRED) gridEmoji += t.hasFlow ? '🟩' : '⬜';
-            else if (t.hasFlow) gridEmoji += '🟨';
-            else gridEmoji += '⬛';
-        }
-        gridEmoji += '\n';
-    }
-    
     const modeText = mode === 'DAILY' ? `${t.shareTemplate.daily} ${currentKey}` : t.shareTemplate.practice;
-    const rankText = winData?.rank ? ` | ${winData.rank}` : '';
-    return `${t.title} ${modeText}\n${moves} ${t.shareTemplate.moves}${rankText}\n\n${gridEmoji}`;
+    return `${t.title} ${modeText}\n${moves} ${t.shareTemplate.moves}\n⚡ SYSTEM HACKED`;
   };
 
   const copyShare = () => {
@@ -302,29 +301,16 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex flex-col items-center">
-      
-      {/* Cyberpunk Win Overlay - Only shows when won, before modal */}
       {showHackEffect && <CyberpunkOverlay onComplete={onHackAnimComplete} lang={lang} />}
 
-      {/* Header */}
       <header className="w-full max-w-lg p-4 pb-2 border-b border-slate-800 bg-slate-900/50 backdrop-blur-md sticky top-0 z-20">
         <div className="flex justify-between items-start mb-4">
             <div>
                 <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-yellow-400">
+                    <h1 className="text-2xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-fuchsia-400">
                     {t.title}
                     </h1>
-                    <button 
-                        onClick={toggleLanguage}
-                        className="text-[10px] bg-slate-800 hover:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded border border-slate-700 font-mono"
-                    >
-                        {lang === 'en' ? 'TR' : 'EN'}
-                    </button>
-                </div>
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 mt-1">
-                    {mode === 'DAILY' && stats.streak > 0 && (
-                        <span className="text-yellow-500">🔥 {stats.streak} {t.streak}</span>
-                    )}
+                    <button onClick={toggleLanguage} className="text-[10px] bg-slate-800 border border-slate-700 px-1 rounded">{lang === 'en' ? 'TR' : 'EN'}</button>
                 </div>
             </div>
             
@@ -334,124 +320,100 @@ const App: React.FC = () => {
             </div>
         </div>
 
-        {/* Mode Switcher */}
-        <div className="flex p-1 bg-slate-800/50 rounded-lg backdrop-blur-sm">
+        <div className="flex p-1 bg-slate-800/50 rounded-lg backdrop-blur-sm mb-2">
             <button 
                 onClick={() => { handleModeSwitch('DAILY'); stopAmbience(); }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'DAILY' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'DAILY' ? 'bg-cyan-700 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
             >
                 {t.modes.daily}
             </button>
             <button 
                 onClick={() => { handleModeSwitch('PRACTICE'); stopAmbience(); }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'PRACTICE' ? 'bg-purple-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${mode === 'PRACTICE' ? 'bg-fuchsia-700 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
             >
                 {t.modes.practice}
             </button>
         </div>
       </header>
 
-      {/* Main Game Area */}
-      <main className="flex-1 w-full max-w-lg p-4 flex flex-col items-center justify-center gap-6">
+      <main className="flex-1 w-full max-w-lg p-2 flex flex-col items-center justify-center gap-4">
         
-        {/* Hint Bubble */}
-        <div className="h-8 flex items-center justify-center w-full px-4">
-            {loadingHint ? (
-                <div className="text-xs font-mono text-cyan-400 animate-pulse">{t.status.uplink}</div>
-            ) : hint ? (
-                <div className="text-xs font-mono text-yellow-300 bg-yellow-900/30 border border-yellow-600/50 px-3 py-2 rounded animate-in fade-in slide-in-from-top-2">
-                    <span className="font-bold mr-2">OP:</span>{hint}
-                </div>
-            ) : null}
+        {/* Ability Status Bar */}
+        <div className="w-full flex justify-between items-center px-2 py-1 bg-slate-900 rounded border border-slate-800">
+            <div className="text-xs text-slate-500 font-mono">ABILITY:</div>
+            <div className={`text-xs font-bold font-mono ${charges > 0 ? 'text-blue-400 animate-pulse' : 'text-slate-700'}`}>
+                {charges > 0 ? "CAPACITOR READY [CLICK BUG]" : "CAPACITOR EMPTY"}
+            </div>
         </div>
 
-        {/* The Grid */}
+        <div className="h-6 flex items-center justify-center w-full px-4">
+             {hint && <div className="text-xs font-mono text-yellow-300 bg-yellow-900/30 px-3 py-1 rounded border border-yellow-600/50">{hint}</div>}
+        </div>
+
         <div 
-            className={`grid gap-1 p-2 bg-slate-900 rounded-xl shadow-2xl border transition-all duration-1000 ${isWon ? 'border-cyan-500 shadow-[0_0_30px_rgba(34,211,238,0.3)]' : 'border-slate-800'}`}
+            className={`grid gap-0.5 p-1 bg-slate-900 rounded-xl shadow-2xl border transition-all duration-1000 ${isWon ? 'border-white shadow-[0_0_30px_rgba(255,255,255,0.3)]' : 'border-slate-800'}`}
             style={{ 
-                gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`
+                gridTemplateColumns: `repeat(${GRID_SIZE}, minmax(0, 1fr))`,
+                width: '100%',
+                aspectRatio: '1/1'
             }}
         >
           {grid.map((row, r) => 
             row.map((tile, c) => (
-              <div key={`${r}-${c}`} className="w-12 h-12 sm:w-14 sm:h-14">
+              <div key={`${r}-${c}`} className="w-full h-full">
                 <Tile tile={tile} onClick={() => handleTileClick(r, c)} isWon={isWon} />
               </div>
             ))
           )}
         </div>
 
-        {/* Footer / Controls */}
         <div className="w-full flex justify-between items-center px-2">
-            <div className="flex gap-4 text-xs text-slate-500 font-mono uppercase tracking-wide">
-                <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_5px_rgba(74,222,128,0.5)]"></span> {t.status.req}</div>
-                <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-900"></span> {t.status.bug}</div>
-            </div>
-
             <div className="flex gap-2">
                 {!isWon && (
-                    <button 
-                        onClick={requestHint}
-                        disabled={loadingHint}
-                        className="px-3 py-1.5 bg-cyan-900/30 hover:bg-cyan-900/50 text-cyan-400 text-xs font-bold rounded border border-cyan-800/50 transition-colors disabled:opacity-50"
-                    >
+                    <button onClick={requestHint} disabled={loadingHint} className="px-3 py-1.5 bg-cyan-900/30 text-cyan-400 text-xs font-bold rounded border border-cyan-800/50">
                         {loadingHint ? '...' : t.buttons.hint}
                     </button>
                 )}
-
-                {mode === 'PRACTICE' && (
-                    <button 
-                        onClick={handleNewPractice}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded border border-slate-700 transition-colors"
-                    >
+                {!isWon && (
+                    <button onClick={handleResetPuzzle} className="px-3 py-1.5 bg-slate-800 text-slate-300 text-xs font-bold rounded border border-slate-700">
                         {t.buttons.reset}
                     </button>
                 )}
             </div>
+            {mode === 'PRACTICE' && !isWon && (
+                <button onClick={handleNewPractice} className="px-3 py-1.5 bg-purple-900/30 text-purple-400 text-xs font-bold rounded border border-purple-800/50">
+                    {t.buttons.newLevel}
+                </button>
+            )}
         </div>
         
-        {/* Theme Name Footer */}
         {theme && (
             <div className="text-center opacity-40">
                 <p className="text-[10px] font-mono tracking-[0.2em] text-cyan-500 uppercase">{theme.name}</p>
             </div>
         )}
-
       </main>
 
-      {/* Intro Modal */}
       <Modal isOpen={showIntro} onClose={() => setShowIntro(false)} title={mode === 'DAILY' ? t.intro.dailyTitle : t.intro.simTitle}>
         <div className="space-y-4">
-            <div className="text-sm text-slate-400 italic border-l-2 border-blue-500 pl-3">
-               "{theme?.description || "System Link Established."}"
+            <div className="text-sm text-slate-400 italic border-l-2 border-cyan-500 pl-3">
+               "{theme?.description || "Color mixing protocols engaged."}"
             </div>
-            
-            {mode === 'DAILY' ? (
-                 <div className="bg-blue-900/20 border border-blue-500/30 p-3 rounded text-xs text-blue-200">
-                    {t.intro.dailyMission}
-                 </div>
-            ) : (
-                <div className="bg-purple-900/20 border border-purple-500/30 p-3 rounded text-xs text-purple-200">
-                    {t.intro.simMission}
-                 </div>
-            )}
-
-            <ul className="space-y-2 text-sm">
-                <li className="flex items-center gap-2">👉 <strong>{t.intro.li1}</strong></li>
-                <li className="flex items-center gap-2">⚡ <strong>{t.intro.li2}</strong></li>
-                <li className="flex items-center gap-2">🚫 <strong>{t.intro.li3}</strong></li>
-                <li className="flex items-center gap-2">🤖 <strong>{t.intro.li4}</strong></li>
-            </ul>
+            <div className="bg-slate-800 p-3 rounded text-xs space-y-2">
+                <div className="flex items-center gap-2"><span className="text-cyan-400 font-bold">CYAN</span> + <span className="text-fuchsia-400 font-bold">MAGENTA</span> = <span className="text-white font-bold">WHITE</span></div>
+                <div className="text-slate-400">Sink requires <strong>WHITE</strong> energy.</div>
+                <div className="text-slate-400">Use <strong>Bridges</strong> to cross paths without mixing.</div>
+                <div className="text-slate-400">Charge the <strong>Capacitor</strong> to delete Bugs.</div>
+            </div>
             <button 
                 onClick={handleStartGame}
-                className={`w-full py-3 font-bold rounded-lg transition-all text-white ${mode === 'DAILY' ? 'bg-blue-600 hover:bg-blue-500' : 'bg-purple-600 hover:bg-purple-500'}`}
+                className={`w-full py-3 font-bold rounded-lg transition-all text-white ${mode === 'DAILY' ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-fuchsia-600 hover:bg-fuchsia-500'}`}
             >
-                {mode === 'DAILY' ? t.buttons.startDaily : t.buttons.startSim}
+                {t.buttons.startDaily}
             </button>
         </div>
       </Modal>
 
-      {/* Win Modal */}
       <Modal isOpen={showWin} onClose={() => setShowWin(false)} title={t.win.title}>
         <div className="space-y-6 text-center">
             <div className="text-6xl animate-bounce">⚡</div>
@@ -459,40 +421,23 @@ const App: React.FC = () => {
                 <h3 className="text-2xl font-bold text-white">{t.win.systemOnline}</h3>
                 <p className="text-slate-400">{moves} {t.moves.toLowerCase()}</p>
             </div>
-            
-            {winData ? (
-                <div className="space-y-3">
-                    <div className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400 uppercase tracking-widest animate-pulse">
-                        {winData.rank}
-                    </div>
-                    <div className="bg-slate-800 p-3 rounded-lg text-sm italic text-yellow-100/80 border border-slate-700">
-                        <span className="block text-xs text-slate-500 not-italic mb-1 font-bold">{t.win.aiLog}:</span>
-                        "{winData.comment}"
-                    </div>
+            {winData && (
+                <div className="bg-slate-800 p-3 rounded-lg text-sm italic text-yellow-100/80 border border-slate-700">
+                    "{winData.comment}"
                 </div>
-            ) : (
-                <div className="text-xs text-slate-500 animate-pulse">{t.win.calculating}</div>
             )}
-
             <div className="flex gap-2">
-                <button 
-                    onClick={copyShare}
-                    className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg transition-all"
-                >
+                <button onClick={copyShare} className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg">
                     {t.buttons.share}
                 </button>
                 {mode === 'PRACTICE' && (
-                    <button 
-                        onClick={handleNewPractice}
-                        className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg transition-all"
-                    >
+                    <button onClick={handleNewPractice} className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg">
                         {t.buttons.next}
                     </button>
                 )}
             </div>
         </div>
       </Modal>
-
     </div>
   );
 };

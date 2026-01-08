@@ -19,6 +19,7 @@ export const TRANSLATIONS = {
     buttons: {
       hint: "HINT",
       reset: "RESET",
+      newLevel: "NEW LEVEL",
       share: "SHARE RESULT",
       next: "NEXT LEVEL",
       startDaily: "INITIATE DAILY RUN",
@@ -77,6 +78,7 @@ export const TRANSLATIONS = {
     buttons: {
       hint: "İPUCU",
       reset: "SIFIRLA",
+      newLevel: "YENİ SEVİYE",
       share: "SONUCU PAYLAŞ",
       next: "SONRAKİ SEVİYE",
       startDaily: "GÜNLÜK MODU BAŞLAT",
