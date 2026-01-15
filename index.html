@@ -15,16 +15,35 @@
         font-family: 'JetBrains Mono', monospace;
       }
 
-      /* --- Cyberpunk Effects --- */
+      /* --- Cyberpunk Background --- */
+      .bg-cyber-grid {
+        background-size: 40px 40px;
+        background-image:
+          linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        animation: grid-move 20s linear infinite;
+      }
+
+      @keyframes grid-move {
+        0% { background-position: 0 0; }
+        100% { background-position: 40px 40px; }
+      }
+
+      .vignette {
+        background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.8) 100%);
+        pointer-events: none;
+      }
+
+      /* --- Effects --- */
 
       /* 1. Flow Animation: Pulsing Neon */
       @keyframes flow-pulse {
         0%, 100% {
-          filter: drop-shadow(0 0 4px currentColor);
-          opacity: 0.9;
+          filter: drop-shadow(0 0 2px currentColor);
+          opacity: 0.8;
         }
         50% {
-          filter: drop-shadow(0 0 15px currentColor);
+          filter: drop-shadow(0 0 8px currentColor);
           opacity: 1;
         }
       }
@@ -41,23 +60,23 @@
       }
       
       .animate-dash {
-        stroke-dasharray: 4 4;
-        animation: dash-flow 0.5s linear infinite;
+        stroke-dasharray: 6 4;
+        animation: dash-flow 0.8s linear infinite;
       }
 
-      /* 2. Glitch Effect: Shake & Chromatic Aberration */
+      /* 2. Glitch Effect */
       @keyframes glitch-shake {
         0% { transform: translate(0); }
-        20% { transform: translate(-2px, 2px); }
-        40% { transform: translate(-2px, -2px); }
-        60% { transform: translate(2px, 2px); }
-        80% { transform: translate(2px, -2px); }
+        20% { transform: translate(-1px, 1px); }
+        40% { transform: translate(-1px, -1px); }
+        60% { transform: translate(1px, 1px); }
+        80% { transform: translate(1px, -1px); }
         100% { transform: translate(0); }
       }
 
       .animate-glitch {
         animation: glitch-shake 0.2s cubic-bezier(.36,.07,.19,.97) both infinite;
-        text-shadow: 2px 0 #0ff, -2px 0 #f00; 
+        text-shadow: 1px 0 #0ff, -1px 0 #f00; 
       }
       
       /* Intense Glitch for Bug Nodes */
@@ -95,14 +114,14 @@
         z-index: -2;
       }
 
-      /* 3. CRT Scanlines for Win Screen */
+      /* 3. CRT Scanlines */
       .scanlines {
         background: linear-gradient(
           to bottom,
           rgba(255,255,255,0),
           rgba(255,255,255,0) 50%,
-          rgba(0,0,0,0.2) 50%,
-          rgba(0,0,0,0.2)
+          rgba(0,0,0,0.1) 50%,
+          rgba(0,0,0,0.1)
         );
         background-size: 100% 4px;
         animation: scanline-move 0.2s linear infinite;
@@ -139,7 +158,8 @@
 }
 </script>
 </head>
-  <body class="bg-slate-950 text-white overflow-hidden">
-    <div id="root"></div>
+  <body class="bg-slate-950 text-white overflow-hidden bg-cyber-grid relative">
+    <div class="fixed inset-0 vignette z-0"></div>
+    <div id="root" class="relative z-10"></div>
   </body>
 </html>
