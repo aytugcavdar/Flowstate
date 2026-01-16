@@ -1,14 +1,18 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { getDailyTheme, getWinningCommentary, getGameHint } from './services/geminiService';
 import { playSound, startAmbience, setMusicIntensity, stopAmbience } from './services/audio';
+import { getProfile, checkBadgesOnWin, generateDailyMissions } from './services/progression';
 import { Tile } from './components/Tile';
 import { Modal } from './components/Modal';
 import { CyberpunkOverlay } from './components/CyberpunkOverlay';
 import { Header } from './components/Header';
 import { GameControls } from './components/GameControls';
+import { TerminalWinScreen } from './components/TerminalWinScreen';
+import { ProfileModal } from './components/ProfileModal';
+import { MissionBoard } from './components/MissionBoard';
 import { TRANSLATIONS, Language } from './constants/translations';
-import { DailyStats, DailyTheme, TileType, WinAnalysis } from './types';
+import { DailyStats, DailyTheme, TileType, WinAnalysis, PlayerProfile, DailyMission } from './types';
 import { STORAGE_KEY_STATS, GRID_SIZE } from './constants';
 import { useGameState } from './hooks/useGameState';
 
@@ -32,7 +36,7 @@ const App: React.FC = () => {
   // --- Game State Hook ---
   const { grid, moves, isWon, charges, loading, onTileClick, resetGame } = useGameState(currentKey);
 
-  // --- Auxiliary State (Theme, Stats, Modals) ---
+  // --- Auxiliary State ---
   const [theme, setTheme] = useState<DailyTheme | null>(null);
   const [winData, setWinData] = useState<WinAnalysis | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -40,18 +44,43 @@ const App: React.FC = () => {
   const [showHackEffect, setShowHackEffect] = useState(false);
   const [showIntro, setShowIntro] = useState(true);
   const [showWin, setShowWin] = useState(false);
-  const [stats, setStats] = useState<DailyStats>({ streak: 0, lastPlayed: '', history: {} });
+  const [showProfile, setShowProfile] = useState(false);
+  const [stats, setStats] = useState<DailyStats>({ streak: 0, lastPlayed: '', history: {}, completedMissions: [] });
+  const [missions, setMissions] = useState<DailyMission[]>([]);
   
+  // Progression State
+  const [profile, setProfile] = useState<PlayerProfile>(getProfile());
+  const [unlockedBadges, setUnlockedBadges] = useState<string[]>([]);
+  const [lastXpGained, setLastXpGained] = useState(0); 
+  const [completedMissionIds, setCompletedMissionIds] = useState<string[]>([]); // For win screen
+  const [gameTimeMs, setGameTimeMs] = useState(0);
+  const [usedHint, setUsedHint] = useState(false);
+  const startTimeRef = useRef<number>(0);
+
   const t = TRANSLATIONS[lang];
 
   // --- Effects ---
 
-  // Load Stats & Theme
+  // Load Stats, Theme, Missions
   useEffect(() => {
       const savedStats = localStorage.getItem(STORAGE_KEY_STATS);
       if (savedStats) setStats(JSON.parse(savedStats));
+      
       getDailyTheme(mode === 'DAILY' ? currentKey : 'CYBERPUNK_RANDOM', lang).then(setTheme);
+      setProfile(getProfile());
+
+      if (mode === 'DAILY') {
+          setMissions(generateDailyMissions(currentKey));
+      } else {
+          setMissions([]);
+      }
   }, [currentKey, mode, lang]);
+
+  // Timer Logic
+  useEffect(() => {
+      if (loading || isWon) return;
+      if (moves === 0) startTimeRef.current = Date.now();
+  }, [loading, isWon, moves]);
 
   // Dynamic Audio
   useEffect(() => {
@@ -69,26 +98,65 @@ const App: React.FC = () => {
   // Win Handler
   useEffect(() => {
     if (isWon && !showHackEffect && !showWin) {
+        // Calculate Time
+        const duration = Date.now() - startTimeRef.current;
+        setGameTimeMs(duration);
+
+        // Check Badges & XP & Missions
+        const { newProfile, newBadges, xpGained, newCompletedMissions } = checkBadgesOnWin(
+            profile, 
+            duration, 
+            usedHint, 
+            moves, 
+            mode, 
+            grid,
+            stats.streak,
+            missions,
+            stats.completedMissions || []
+        );
+
+        setProfile(newProfile);
+        setUnlockedBadges(newBadges);
+        setLastXpGained(xpGained);
+        setCompletedMissionIds([...(stats.completedMissions || []), ...newCompletedMissions]);
+
+        // Save Stats Update (Streaks + Missions)
+        if (mode === 'DAILY') {
+            const newStats = { ...stats };
+            
+            // Streak Logic
+            if (newStats.lastPlayed !== currentKey) {
+                newStats.streak += 1;
+                newStats.lastPlayed = currentKey;
+                newStats.history[currentKey] = moves;
+                newStats.completedMissions = []; // Reset if new day, though currentKey check handles it implicitly usually
+            }
+            
+            // Append new missions
+            if (!newStats.completedMissions) newStats.completedMissions = [];
+            newCompletedMissions.forEach(id => {
+                if (!newStats.completedMissions.includes(id)) newStats.completedMissions.push(id);
+            });
+
+            setStats(newStats);
+            localStorage.setItem(STORAGE_KEY_STATS, JSON.stringify(newStats));
+        }
+
         setTimeout(() => handleWin(), 1000);
     }
   }, [isWon]);
+
+  // Reset hints on new level
+  useEffect(() => {
+      setUsedHint(false);
+      startTimeRef.current = Date.now();
+  }, [currentKey]);
 
   // --- Handlers ---
 
   const handleWin = async () => {
     setShowHackEffect(true);
     playSound('win');
-    
-    if (mode === 'DAILY') {
-        const newStats = { ...stats };
-        if (newStats.lastPlayed !== currentKey) {
-            newStats.streak += 1;
-            newStats.lastPlayed = currentKey;
-            newStats.history[currentKey] = moves;
-            setStats(newStats);
-            localStorage.setItem(STORAGE_KEY_STATS, JSON.stringify(newStats));
-        }
-    }
     const data = await getWinningCommentary(moves, grid, lang);
     setWinData(data);
   };
@@ -96,6 +164,7 @@ const App: React.FC = () => {
   const requestHint = async () => {
       if (loadingHint || isWon) return;
       setLoadingHint(true);
+      setUsedHint(true); // Mark as used
       playSound('click');
       const hintText = await getGameHint(grid, lang);
       setHint(hintText);
@@ -107,6 +176,7 @@ const App: React.FC = () => {
       setShowIntro(false);
       startAmbience();
       playSound('power');
+      startTimeRef.current = Date.now();
   };
 
   const handleModeSwitch = (newMode: GameMode) => {
@@ -124,13 +194,30 @@ const App: React.FC = () => {
     alert(t.win.shareText);
   };
 
+  const nextLevel = () => {
+      setPracticeSeed(Date.now().toString());
+      setShowWin(false);
+      setWinData(null);
+      setUnlockedBadges([]);
+      setUsedHint(false);
+      startAmbience();
+  }
+
   if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-blue-500 font-mono animate-pulse">{t.status.initializing}</div>;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans flex flex-col items-center">
       {showHackEffect && <CyberpunkOverlay onComplete={() => { setShowHackEffect(false); setShowWin(true); }} lang={lang} />}
 
-      <Header moves={moves} mode={mode} lang={lang} setLang={(l) => { setLang(l); playSound('click'); }} setMode={handleModeSwitch} />
+      <Header 
+        moves={moves} 
+        mode={mode} 
+        lang={lang} 
+        setLang={(l) => { setLang(l); playSound('click'); }} 
+        setMode={handleModeSwitch} 
+        onOpenProfile={() => setShowProfile(true)}
+        profile={profile}
+      />
 
       {/* Main Game Area */}
       <main className="flex-1 w-full max-w-lg p-2 flex flex-col items-center justify-center gap-4">
@@ -160,7 +247,7 @@ const App: React.FC = () => {
             lang={lang}
             onRequestHint={requestHint}
             onReset={resetGame}
-            onNewLevel={() => setPracticeSeed(Date.now().toString())}
+            onNewLevel={nextLevel}
         />
 
         {theme && <div className="text-center opacity-40 mt-2"><p className="text-[10px] font-mono tracking-[0.2em] text-cyan-500 uppercase">{theme.name}</p></div>}
@@ -168,8 +255,11 @@ const App: React.FC = () => {
 
       {/* Modals */}
       <Modal isOpen={showIntro} onClose={() => setShowIntro(false)} title={mode === 'DAILY' ? t.intro.dailyTitle : t.intro.simTitle}>
-        <div className="space-y-4">
+        <div className="space-y-3">
             <div className="text-sm text-slate-400 italic border-l-2 border-cyan-500 pl-3">"{theme?.description || "Color mixing protocols engaged."}"</div>
+            
+            {mode === 'DAILY' && <MissionBoard missions={missions} stats={stats} lang={lang} />}
+
             <div className="bg-slate-800 p-3 rounded text-xs space-y-2 text-slate-400">
                 <div className="flex items-center gap-2 text-white bg-slate-900/50 p-2 rounded"><span className="text-cyan-400 font-bold">CYAN</span> + <span className="text-fuchsia-400 font-bold">MAGENTA</span> = WHITE</div>
                 <div className="grid grid-cols-2 gap-2">
@@ -182,17 +272,30 @@ const App: React.FC = () => {
         </div>
       </Modal>
 
-      <Modal isOpen={showWin} onClose={() => setShowWin(false)} title={t.win.title}>
-        <div className="space-y-6 text-center">
-            <div className="text-6xl animate-bounce">⚡</div>
-            <div><h3 className="text-2xl font-bold text-white">{t.win.systemOnline}</h3><p className="text-slate-400">{moves} {t.moves.toLowerCase()}</p></div>
-            {winData && <div className="bg-slate-800 p-3 rounded-lg text-sm italic text-yellow-100/80 border border-slate-700">"{winData.comment}"</div>}
-            <div className="flex gap-2">
-                <button onClick={copyShare} className="flex-1 py-3 bg-green-600 hover:bg-green-500 text-white font-bold rounded-lg">{t.buttons.share}</button>
-                {mode === 'PRACTICE' && <button onClick={() => setPracticeSeed(Date.now().toString())} className="flex-1 py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg">{t.buttons.next}</button>}
-            </div>
-        </div>
-      </Modal>
+      <ProfileModal 
+        isOpen={showProfile} 
+        onClose={() => setShowProfile(false)} 
+        profile={profile} 
+        lang={lang} 
+      />
+
+      {showWin && (
+          <TerminalWinScreen 
+            moves={moves}
+            timeMs={gameTimeMs}
+            unlockedBadges={unlockedBadges}
+            winAnalysis={winData}
+            lang={lang}
+            onShare={copyShare}
+            onNext={nextLevel}
+            onClose={() => setShowWin(false)}
+            mode={mode}
+            xpGained={lastXpGained}
+            missions={mode === 'DAILY' ? missions : undefined}
+            completedMissionIds={completedMissionIds}
+            streak={stats.streak}
+          />
+      )}
     </div>
   );
 };

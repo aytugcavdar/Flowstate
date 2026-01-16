@@ -47,10 +47,23 @@ export interface GameState {
   charges: number; // For capacitor ability
 }
 
+// --- Mission Types ---
+
+export type MissionType = 'SPEED' | 'MOVES' | 'NO_HINT' | 'BONUS_NODES';
+
+export interface DailyMission {
+  id: string;
+  type: MissionType;
+  target: number; // e.g. 30 (seconds), 25 (moves)
+  xpReward: number;
+  description: string; // Key for translation
+}
+
 export interface DailyStats {
   streak: number;
   lastPlayed: string;
-  history: Record<string, number>; 
+  history: Record<string, number>;
+  completedMissions: string[]; // IDs of missions completed today
 }
 
 export interface DailyTheme {
@@ -62,6 +75,22 @@ export interface DailyTheme {
 export interface WinAnalysis {
   rank: string;
   comment: string;
+}
+
+// --- Progression Types ---
+
+export interface Badge {
+  id: string;
+  icon: string;
+}
+
+export interface PlayerProfile {
+  totalWins: number;
+  fastestWinMs: number;
+  consecutiveNoHintWins: number;
+  badges: string[]; // IDs of unlocked badges
+  xp: number; // NEW: Total Experience Points
+  level: number; // NEW: Current Level
 }
 
 export const DIRECTIONS = [

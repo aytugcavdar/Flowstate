@@ -25,3 +25,4 @@ export const FLOW_COLOR = {
 export const STORAGE_KEY_STATS = 'flowstate_stats_v1';
 export const STORAGE_KEY_STATE = 'flowstate_gamestate_v4'; // Version bump
 export const STORAGE_KEY_THEME = 'flowstate_theme_cache_v1';
+export const STORAGE_KEY_PROFILE = 'flowstate_profile_v1';

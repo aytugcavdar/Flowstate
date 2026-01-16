@@ -23,7 +23,9 @@ export const TRANSLATIONS = {
       share: "SHARE RESULT",
       next: "NEXT LEVEL",
       startDaily: "INITIATE DAILY RUN",
-      startSim: "START SIMULATION"
+      startSim: "START SIMULATION",
+      profile: "PROFILE",
+      close: "CLOSE TERMINAL"
     },
     intro: {
       dailyTitle: "Daily Protocol",
@@ -33,7 +35,17 @@ export const TRANSLATIONS = {
       li1: "Rotate pipes to guide flow.",
       li2: "Power all 'Req' nodes.",
       li3: "Avoid 'Bug' nodes.",
-      li4: "Stuck? Ask the AI Operator for a hint."
+      li4: "Stuck? Ask the AI Operator for a hint.",
+      todaysOrders: "TODAY'S ORDERS",
+      streakBonus: "STREAK BONUS"
+    },
+    missions: {
+        mission_speed: "Complete in under {target}s",
+        mission_moves: "Finish in {target} moves or less",
+        mission_nohint: "Use ZERO hints",
+        mission_bonus: "Power all BONUS nodes",
+        complete: "COMPLETE",
+        reward: "REWARD"
     },
     win: {
       title: "Sequence Complete",
@@ -59,6 +71,32 @@ export const TRANSLATIONS = {
         daily: "Daily",
         practice: "Practice Run",
         moves: "Moves"
+    },
+    terminal: {
+        header: "TERMINAL_OUTPUT_V4.0",
+        upload: "UPLOAD_COMPLETE",
+        analysis: "EFFICIENCY_ANALYSIS",
+        time: "TIME_ELAPSED",
+        badge: "NEW_PROTOCOL_DISCOVERED",
+        rank: "OPERATOR_RANK",
+        xp: "DATA_MINED",
+        missions: "MISSION_REPORT",
+        streak: "STREAK_MULTIPLIER"
+    },
+    badges: {
+        NOVICE: { name: "Script Kiddie", desc: "First successful hack." },
+        SPEED_DEMON: { name: "Speed Demon", desc: "Complete a run in under 30 seconds." },
+        NETRUNNER: { name: "Netrunner", desc: "5 consecutive wins without hints." },
+        ARCHITECT: { name: "System Architect", desc: "10 total successful runs." },
+        CYBER_GOD: { name: "Mainframe Deity", desc: "< 20 moves in under 45s." }
+    },
+    profile: {
+        title: "OPERATOR PROFILE",
+        wins: "TOTAL BREACHES",
+        fastest: "BEST TIME",
+        streak: "NO-HINT STREAK",
+        level: "SECURITY CLEARANCE",
+        xp: "TOTAL DATA"
     }
   },
   tr: {
@@ -82,7 +120,9 @@ export const TRANSLATIONS = {
       share: "SONUCU PAYLAŞ",
       next: "SONRAKİ SEVİYE",
       startDaily: "GÜNLÜK MODU BAŞLAT",
-      startSim: "SİMÜLASYONU BAŞLAT"
+      startSim: "SİMÜLASYONU BAŞLAT",
+      profile: "PROFİL",
+      close: "TERMİNALİ KAPAT"
     },
     intro: {
       dailyTitle: "Günlük Protokol",
@@ -93,6 +133,14 @@ export const TRANSLATIONS = {
       li2: "Tüm 'Gerekli' düğümlere güç ver.",
       li3: "'Hata' (Bug) düğümlerinden kaçın.",
       li4: "Takıldın mı? Yapay Zeka Operatörüne sor."
+    },
+    missions: {
+        mission_speed: "{target}sn altında tamamla",
+        mission_moves: "{target} hamle veya daha azıyla bitir",
+        mission_nohint: "HİÇ ipucu kullanma",
+        mission_bonus: "Tüm BONUS düğümleri aktifle",
+        complete: "TAMAMLANDI",
+        reward: "ÖDÜL"
     },
     win: {
       title: "Dizi Tamamlandı",
@@ -118,6 +166,32 @@ export const TRANSLATIONS = {
         daily: "Günlük",
         practice: "Antrenman",
         moves: "Hamle"
+    },
+    terminal: {
+        header: "TERMINAL_ÇIKTI_V4.0",
+        upload: "YÜKLEME_TAMAMLANDI",
+        analysis: "VERİMLİLİK_ANALİZİ",
+        time: "GEÇEN_SÜRE",
+        badge: "YENİ_PROTOKOL_KEŞFEDİLDİ",
+        rank: "OPERATÖR_RÜTBESİ",
+        xp: "VERİ_ÇIKARILDI",
+        missions: "GÖREV_RAPORU",
+        streak: "SERİ_ÇARPANI"
+    },
+    badges: {
+        NOVICE: { name: "Çaylak Hacker", desc: "İlk başarılı sızma." },
+        SPEED_DEMON: { name: "Hız Şeytanı", desc: "30 saniyenin altında tamamla." },
+        NETRUNNER: { name: "Ağ Koşucusu", desc: "İpucu kullanmadan üst üste 5 zafer." },
+        ARCHITECT: { name: "Sistem Mimarı", desc: "Toplam 10 başarılı operasyon." },
+        CYBER_GOD: { name: "Ana Bilgisayar Tanrısı", desc: "45sn altında ve 20 hamleden az." }
+    },
+    profile: {
+        title: "OPERATÖR PROFİLİ",
+        wins: "TOPLAM SIZMA",
+        fastest: "EN İYİ SÜRE",
+        streak: "İPUCUSUZ SERİ",
+        level: "GÜVENLİK YETKİSİ",
+        xp: "TOPLAM VERİ"
     }
   }
 };
