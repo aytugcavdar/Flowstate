@@ -93,6 +93,28 @@ export interface PlayerProfile {
   level: number; // NEW: Current Level
 }
 
+// --- Campaign Types ---
+
+export interface CampaignLevel {
+  id: string;
+  seed: string; // The seed used for level generation
+  parMoves: number; // Moves required for 3 stars
+  title: string;
+}
+
+export interface CampaignChapter {
+  id: string;
+  title: string;
+  description: string;
+  requiredStars: number; // Stars needed to unlock this chapter
+  levels: CampaignLevel[];
+}
+
+export interface CampaignProgress {
+  unlockedChapters: string[];
+  levelStars: Record<string, number>; // levelId -> stars (1, 2, 3)
+}
+
 export const DIRECTIONS = [
   [-1, 0], // Up
   [0, 1],  // Right

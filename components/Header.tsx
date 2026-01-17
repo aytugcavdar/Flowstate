@@ -1,19 +1,21 @@
 
 import React from 'react';
 import { TRANSLATIONS, Language } from '../constants/translations';
-import { PlayerProfile } from '../types';
+import { PlayerProfile, CampaignLevel } from '../types';
 
 interface HeaderProps {
     moves: number;
-    mode: 'DAILY' | 'PRACTICE';
+    mode: string; // 'DAILY' | 'PRACTICE' | 'CAMPAIGN'
     lang: Language;
     setLang: (l: Language) => void;
-    setMode: (m: 'DAILY' | 'PRACTICE') => void;
+    setMode: (m: 'DAILY' | 'PRACTICE' | 'CAMPAIGN') => void;
     onOpenProfile: () => void;
     profile: PlayerProfile;
+    campaignLevel?: CampaignLevel | null;
+    currentStars?: number; // 0-3 for current run
 }
 
-export const Header: React.FC<HeaderProps> = ({ moves, mode, lang, setLang, setMode, onOpenProfile, profile }) => {
+export const Header: React.FC<HeaderProps> = ({ moves, mode, lang, setLang, setMode, onOpenProfile, profile, campaignLevel, currentStars }) => {
     const t = TRANSLATIONS[lang];
     
     return (
@@ -37,17 +39,37 @@ export const Header: React.FC<HeaderProps> = ({ moves, mode, lang, setLang, setM
 
                     <div>
                         <span className="block text-slate-500 text-[10px] uppercase tracking-wider">{t.moves}</span>
-                        <span className="text-white font-bold font-mono text-xl">{moves}</span>
+                        <div className="flex items-baseline gap-2 justify-end">
+                            <span className="text-white font-bold font-mono text-xl">{moves}</span>
+                            {/* Star Preview for Campaign */}
+                            {mode === 'CAMPAIGN' && currentStars !== undefined && (
+                                <div className="flex text-xs">
+                                    {[1,2,3].map(s => (
+                                        <span key={s} className={s <= currentStars ? 'text-yellow-400' : 'text-slate-800'}>★</span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
-            <div className="flex p-1 bg-slate-800/50 rounded-lg backdrop-blur-sm mb-2">
-                {(['DAILY', 'PRACTICE'] as const).map(m => (
-                    <button key={m} onClick={() => setMode(m)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${mode === m ? (m==='DAILY'?'bg-cyan-700':'bg-fuchsia-700') + ' text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
-                        {m === 'DAILY' ? t.modes.daily : t.modes.practice}
-                    </button>
-                ))}
-            </div>
+            
+            {/* Mode Switcher or Level Title */}
+            {mode === 'CAMPAIGN' && campaignLevel ? (
+                 <div className="bg-slate-800/80 p-2 rounded flex justify-between items-center animate-in slide-in-from-top-2">
+                     <button onClick={() => setMode('CAMPAIGN')} className="text-xs text-cyan-400 hover:underline">← {t.buttons.back}</button>
+                     <span className="text-xs font-bold text-white tracking-widest">{campaignLevel.title.toUpperCase()}</span>
+                     <div className="text-[10px] text-slate-400">PAR: {campaignLevel.parMoves}</div>
+                 </div>
+            ) : (
+                <div className="flex p-1 bg-slate-800/50 rounded-lg backdrop-blur-sm mb-2">
+                    {(['DAILY', 'PRACTICE', 'CAMPAIGN'] as const).map(m => (
+                        <button key={m} onClick={() => setMode(m)} className={`flex-1 py-1.5 text-[10px] sm:text-xs font-bold rounded-md transition-all ${mode === m ? (m==='DAILY'?'bg-cyan-700': m==='CAMPAIGN' ? 'bg-yellow-700' : 'bg-fuchsia-700') + ' text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}>
+                            {m === 'DAILY' ? t.modes.daily : m === 'CAMPAIGN' ? t.modes.campaign : t.modes.practice}
+                        </button>
+                    ))}
+                </div>
+            )}
         </header>
     );
 };

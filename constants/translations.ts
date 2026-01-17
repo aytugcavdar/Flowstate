@@ -8,7 +8,8 @@ export const TRANSLATIONS = {
     streak: "Day Streak",
     modes: {
       daily: "DAILY RUN",
-      practice: "PRACTICE"
+      practice: "PRACTICE",
+      campaign: "CAMPAIGN"
     },
     status: {
       req: "Req",
@@ -25,7 +26,9 @@ export const TRANSLATIONS = {
       startDaily: "INITIATE DAILY RUN",
       startSim: "START SIMULATION",
       profile: "PROFILE",
-      close: "CLOSE TERMINAL"
+      close: "CLOSE TERMINAL",
+      back: "BACK TO MENU",
+      select: "SELECT"
     },
     intro: {
       dailyTitle: "Daily Protocol",
@@ -81,7 +84,9 @@ export const TRANSLATIONS = {
         rank: "OPERATOR_RANK",
         xp: "DATA_MINED",
         missions: "MISSION_REPORT",
-        streak: "STREAK_MULTIPLIER"
+        streak: "STREAK_MULTIPLIER",
+        stars: "PROTOCOL_RATING",
+        chapter_progress: "CHAPTER_PROGRESS"
     },
     badges: {
         NOVICE: { name: "Script Kiddie", desc: "First successful hack." },
@@ -97,6 +102,13 @@ export const TRANSLATIONS = {
         streak: "NO-HINT STREAK",
         level: "SECURITY CLEARANCE",
         xp: "TOTAL DATA"
+    },
+    campaign: {
+        title: "CAMPAIGN",
+        locked: "ENCRYPTED - REQ STARS:",
+        complete: "SYSTEM OWNED",
+        chapter: "CHAPTER",
+        totalStars: "TOTAL STARS"
     }
   },
   tr: {
@@ -105,7 +117,8 @@ export const TRANSLATIONS = {
     streak: "Gün Seri",
     modes: {
       daily: "GÜNLÜK",
-      practice: "ANTRENMAN"
+      practice: "ANTRENMAN",
+      campaign: "HİKAYE"
     },
     status: {
       req: "Gerekli",
@@ -122,7 +135,9 @@ export const TRANSLATIONS = {
       startDaily: "GÜNLÜK MODU BAŞLAT",
       startSim: "SİMÜLASYONU BAŞLAT",
       profile: "PROFİL",
-      close: "TERMİNALİ KAPAT"
+      close: "TERMİNALİ KAPAT",
+      back: "MENÜYE DÖN",
+      select: "SEÇ"
     },
     intro: {
       dailyTitle: "Günlük Protokol",
@@ -176,7 +191,9 @@ export const TRANSLATIONS = {
         rank: "OPERATÖR_RÜTBESİ",
         xp: "VERİ_ÇIKARILDI",
         missions: "GÖREV_RAPORU",
-        streak: "SERİ_ÇARPANI"
+        streak: "SERİ_ÇARPANI",
+        stars: "PROTOKOL_DERECESİ",
+        chapter_progress: "BÖLÜM_İLERLEMESİ"
     },
     badges: {
         NOVICE: { name: "Çaylak Hacker", desc: "İlk başarılı sızma." },
@@ -192,6 +209,13 @@ export const TRANSLATIONS = {
         streak: "İPUCUSUZ SERİ",
         level: "GÜVENLİK YETKİSİ",
         xp: "TOPLAM VERİ"
+    },
+    campaign: {
+        title: "HİKAYE",
+        locked: "ŞİFRELİ - GEREKEN YILDIZ:",
+        complete: "SİSTEM ELE GEÇİRİLDİ",
+        chapter: "BÖLÜM",
+        totalStars: "TOPLAM YILDIZ"
     }
   }
 };

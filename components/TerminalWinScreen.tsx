@@ -14,15 +14,17 @@ interface TerminalWinScreenProps {
     onShare: () => void;
     onNext: () => void;
     onClose: () => void;
-    mode: 'DAILY' | 'PRACTICE';
+    mode: string; // 'DAILY' | 'PRACTICE' | 'CAMPAIGN'
     xpGained: number;
     missions?: DailyMission[];
     completedMissionIds?: string[];
     streak?: number;
+    campaignStars?: number; // New for campaign
+    hasNextLevel?: boolean;
 }
 
 export const TerminalWinScreen: React.FC<TerminalWinScreenProps> = ({ 
-    moves, timeMs, unlockedBadges, winAnalysis, lang, onShare, onNext, onClose, mode, xpGained, missions, completedMissionIds, streak 
+    moves, timeMs, unlockedBadges, winAnalysis, lang, onShare, onNext, onClose, mode, xpGained, missions, completedMissionIds, streak, campaignStars, hasNextLevel 
 }) => {
     const t = TRANSLATIONS[lang];
     const [lines, setLines] = useState<React.ReactNode[]>([]);
@@ -54,13 +56,20 @@ export const TerminalWinScreen: React.FC<TerminalWinScreenProps> = ({
                 </div>
             );
 
-            await wait(200);
-            addLine(
-                <div className="flex justify-between w-full max-w-xs text-sm">
-                    <span className="text-slate-400">{t.terminal.time}:</span>
-                    <span className="text-cyan-400 font-mono">{(timeMs / 1000).toFixed(2)}s</span>
-                </div>
-            );
+            // Campaign Stars
+            if (mode === 'CAMPAIGN' && campaignStars) {
+                await wait(400);
+                addLine(
+                    <div className="flex justify-between items-center w-full max-w-xs text-sm mt-2 p-2 bg-yellow-900/10 border border-yellow-900/30 rounded">
+                        <span className="text-slate-400">{t.terminal.stars}:</span>
+                        <div className="flex gap-1 text-xl">
+                            {[1,2,3].map(s => (
+                                <span key={s} className={`transform transition-all ${s <= campaignStars ? 'text-yellow-400 scale-110' : 'text-slate-800'}`}>★</span>
+                            ))}
+                        </div>
+                    </div>
+                );
+            }
 
             // Mission Report
             if (missions && completedMissionIds && missions.length > 0) {
@@ -125,7 +134,7 @@ export const TerminalWinScreen: React.FC<TerminalWinScreenProps> = ({
 
         sequence();
         return () => clearTimeout(timer);
-    }, [moves, timeMs, unlockedBadges, winAnalysis, xpGained, missions, completedMissionIds]);
+    }, [moves, timeMs, unlockedBadges, winAnalysis, xpGained, missions, completedMissionIds, campaignStars]);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
@@ -147,7 +156,7 @@ export const TerminalWinScreen: React.FC<TerminalWinScreenProps> = ({
                             <button onClick={onShare} className="flex-1 py-3 bg-green-700 hover:bg-green-600 text-white font-bold rounded flex items-center justify-center gap-2 group shadow-lg shadow-green-900/50">
                                 <span>{t.buttons.share}</span>
                             </button>
-                            {mode === 'PRACTICE' && (
+                            {(mode === 'PRACTICE' || (mode === 'CAMPAIGN' && hasNextLevel)) && (
                                 <button onClick={onNext} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded border border-slate-600">
                                     {t.buttons.next}
                                 </button>
